@@ -1,56 +1,68 @@
-import logging import os import openai from telegram import Update, ForceReply from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import os
+import logging
+import openai
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-Enable logging
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-logging.basicConfig( format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO ) logger = logging.getLogger(name)
+# API keys from environment
+openai.api_key = os.getenv("OPENAI_API_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-Set your OpenAI API key and Telegram Bot Token
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") openai.api_key = OPENAI_API_KEY
-
-Prompt prefix
-
-system_prompt = ( "You are Emotional Saathi, a kind, supportive, desi-style emotional support chatbot. " "You always respond with empathy, warmth, and actionable help. If someone says they're anxious, you might guide them through breathing, offer a small technique, or share a gentle affirmation in Hindi-English style. Keep responses short, comforting, and creative." )
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: user = update.effective_user await update.message.reply_html( rf"Namaste {user.mention_html()} ✨ I'm your Emotional Saathi! ❤\nHow can I help you today? Just say what's on your mind.", reply_markup=ForceReply(selective=True), )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: await update.message.reply_text( "💬 Here's what I can do:\n" "/start – Begin our chat\n" "/help – See available commands\n" "/clear – Reset our conversation\n\n" "Or simply say things like:\n" "• I'm feeling anxious\n" "• I had a bad day\n" "• Can you help me breathe?\n\n" "This is a safe, supportive space. ✨ You’re not alone." )
-
-async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: context.user_data["chat_history"] = [] await update.message.reply_text("🧹 Cleared our conversation. I'm here whenever you want to talk.")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: user_input = update.message.text chat_history = context.user_data.get("chat_history", [])
-
-chat_history.append({"role": "user", "content": user_input})
-messages = [{"role": "system", "content": system_prompt}] + chat_history
-
-try:
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=messages,
-        temperature=0.7,
-        max_tokens=200
-    )
-    reply_text = response["choices"][0]["message"]["content"].strip()
-
-    chat_history.append({"role": "assistant", "content": reply_text})
-    context.user_data["chat_history"] = chat_history[-10:]  # Keep recent
-
-    await update.message.reply_text(reply_text)
-
-except Exception as e:
-    logger.error(f"OpenAI error: {e}")
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Sorry yaar 😔 I'm having trouble replying right now. Please try again shortly."
+        "Hello! I'm Emotional Saathi 🫶\n\nJust say something like 'I'm feeling sad' or 'I’m anxious', and I’ll be here to help."
     )
 
-def main() -> None: application = Application.builder().token(TELEGRAM_TOKEN).build()
+# Help command
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "**Here's what I can do:**\n"
+        "- `/start` – Begin our chat\n"
+        "- `/help` – See available commands\n"
+        "- `/clear` – Reset the conversation\n\n"
+        "Or simply say:\n"
+        "- I'm feeling anxious\n"
+        "- I need someone to talk to\n\n"
+        "*This is a safe, kind space.*"
+    )
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("help", help_command))
-application.add_handler(CommandHandler("clear", clear_command))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Clear command
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.chat_data.clear()
+    await update.message.reply_text("Cleared our past messages. Feel free to start fresh 🧼")
 
-application.run_polling()
+# Handle normal messages
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
 
-if name == "main": main()
+    prompt = (
+        f"You are an emotional support chatbot named Emotional Saathi. "
+        f"Respond kindly and supportively to the user's message.\n\nUser: {user_input}\nBot:"
+    )
 
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        bot_reply = response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        bot_reply = "I'm having trouble responding right now. Please try again shortly. 💙"
+
+    await update.message.reply_text(bot_reply)
+
+# Main bot setup
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Emotional Saathi is running...")
+    app.run_polling()
